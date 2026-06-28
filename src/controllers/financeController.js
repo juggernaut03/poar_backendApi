@@ -1,6 +1,7 @@
 import { Transaction } from '../models/Transaction.js';
 import { DailySales } from '../models/DailySales.js';
 import { parseTransactions, parseSalesDashboard } from '../utils/financeParsers.js';
+import { resolveCogs } from '../config/cogsMap.js';
 
 // Amazon reserve/balance movements are not income or expense — they shift
 // held funds between statements and net to zero. Exclude from P&L.
@@ -163,6 +164,79 @@ export async function listTransactions(req, res) {
     Transaction.countDocuments(match),
   ]);
   res.json({ items, total, page, pages: Math.ceil(total / limit) });
+}
+
+// GET /api/admin/finance/profit — true net profit (after Amazon fees AND COGS)
+export async function profit(req, res) {
+  const base = rangeFilter(req.query);
+
+  // Per-product: paid orders + net, and refund orders + net.
+  const [paid, refunds] = await Promise.all([
+    Transaction.aggregate([
+      { $match: { ...base, type: 'Order Payment' } },
+      { $group: { _id: '$productDetails', orders: { $sum: 1 }, net: { $sum: '$total' }, fees: { $sum: '$amazonFees' } } },
+    ]),
+    Transaction.aggregate([
+      { $match: { ...base, type: 'Refund' } },
+      { $group: { _id: '$productDetails', orders: { $sum: 1 }, net: { $sum: '$total' } } },
+    ]),
+  ]);
+
+  const refMap = {};
+  refunds.forEach((r) => { refMap[r._id] = r; });
+
+  const products = [];
+  let totalProfit = 0;
+  let totalCogs = 0;
+  let totalNetAfterAmazon = 0;
+  let unmapped = 0;
+
+  for (const p of paid) {
+    const ref = refMap[p._id] || { orders: 0, net: 0 };
+    const cogsInfo = resolveCogs(p._id);
+    const unitsKept = Math.max(0, p.orders - ref.orders); // units customers kept
+    const netAfterAmazon = p.net + ref.net; // Amazon net incl. refunds
+    const cogsPerUnit = cogsInfo ? cogsInfo.cost : null;
+    const cogsTotal = cogsPerUnit != null ? unitsKept * cogsPerUnit : null;
+    const productProfit = cogsTotal != null ? netAfterAmazon - cogsTotal : null;
+
+    if (cogsPerUnit == null) unmapped++;
+    if (productProfit != null) { totalProfit += productProfit; totalCogs += cogsTotal; }
+    totalNetAfterAmazon += netAfterAmazon;
+
+    products.push({
+      product: (cogsInfo?.label) || (p._id || 'Unknown').slice(0, 60),
+      sku: cogsInfo?.sku || null,
+      paidOrders: p.orders,
+      refundOrders: ref.orders,
+      unitsKept,
+      netAfterAmazon: round(netAfterAmazon),
+      cogsPerUnit,
+      cogsTotal: cogsTotal != null ? round(cogsTotal) : null,
+      profit: productProfit != null ? round(productProfit) : null,
+      hasCost: cogsPerUnit != null,
+    });
+  }
+
+  products.sort((a, b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity));
+
+  // Account-level costs not tied to a single product (storage/subscription/etc.).
+  const svc = await Transaction.aggregate([
+    { $match: { ...base, type: 'Service Fees' } },
+    { $group: { _id: null, total: { $sum: '$total' } } },
+  ]);
+  const serviceFees = svc[0]?.total || 0;
+
+  res.json({
+    currency: 'USD',
+    products,
+    productProfit: round(totalProfit), // sum of per-product profit
+    totalCogs: round(totalCogs),
+    serviceFees: round(serviceFees), // negative
+    netProfit: round(totalProfit + serviceFees), // bottom line after everything we can attribute
+    netAfterAmazon: round(totalNetAfterAmazon),
+    unmappedProducts: unmapped, // products still missing a COGS value
+  });
 }
 
 // POST /api/admin/finance/import — upload a CSV (type=transactions|sales)

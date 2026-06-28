@@ -53,6 +53,7 @@ admin.post('/uploads', upload.array('files', 8), asyncHandler(uploadFiles));
 admin.get('/finance/summary', asyncHandler(finance.summary));
 admin.get('/finance/sales-trend', asyncHandler(finance.salesTrend));
 admin.get('/finance/top-products', asyncHandler(finance.topProducts));
+admin.get('/finance/profit', asyncHandler(finance.profit));
 admin.get('/finance/transactions', asyncHandler(finance.listTransactions));
 admin.post('/finance/import', uploadCsv.single('file'), asyncHandler(finance.importUpload));
 

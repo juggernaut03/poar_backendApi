@@ -2,6 +2,10 @@ import { Transaction } from '../models/Transaction.js';
 import { DailySales } from '../models/DailySales.js';
 import { parseTransactions, parseSalesDashboard } from '../utils/financeParsers.js';
 
+// Amazon reserve/balance movements are not income or expense — they shift
+// held funds between statements and net to zero. Exclude from P&L.
+const RESERVE_TYPES = ['Unavailable balance', "Previous statement's unavailable balance"];
+
 // ---- Import helpers (used by both upload endpoint and seed script) ----
 
 export async function importTransactions(text) {
@@ -43,7 +47,7 @@ function rangeFilter(query) {
 
 // GET /api/admin/finance/summary — P&L summary cards
 export async function summary(req, res) {
-  const match = rangeFilter(req.query);
+  const match = { ...rangeFilter(req.query), type: { $nin: RESERVE_TYPES } };
 
   const txAgg = await Transaction.aggregate([
     { $match: match },
@@ -73,8 +77,18 @@ export async function summary(req, res) {
   const liquidations = byType['Liquidations']?.total || 0;
   const reimbursements = byType['Inventory Reimbursement']?.total || 0;
 
+  // Actual coverage of imported transaction data (so the period is always clear).
+  const [first, last] = await Promise.all([
+    Transaction.findOne(match).sort({ date: 1 }).select('date'),
+    Transaction.findOne(match).sort({ date: -1 }).select('date'),
+  ]);
+
   res.json({
     range: { from: req.query.from || null, to: req.query.to || null },
+    coverage: {
+      from: first?.date?.toISOString().slice(0, 10) || null,
+      to: last?.date?.toISOString().slice(0, 10) || null,
+    },
     currency: 'USD',
     grossSales: round(grossSales),
     refunds: round(refunds),

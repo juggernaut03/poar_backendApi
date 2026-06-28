@@ -6,6 +6,7 @@ import { upload } from '../middleware/upload.js';
 import { login, me } from '../controllers/authController.js';
 import * as products from '../controllers/productController.js';
 import * as content from '../controllers/contentController.js';
+import * as categories from '../controllers/categoryController.js';
 import { uploadFiles } from '../controllers/uploadController.js';
 
 const router = Router();
@@ -14,6 +15,7 @@ const router = Router();
 router.get('/products', asyncHandler(products.listPublic));
 router.get('/products/:slug', asyncHandler(products.getBySlug));
 router.get('/categories', asyncHandler(products.listCategories));
+router.get('/categories/managed', asyncHandler(categories.listPublic));
 router.get('/content', asyncHandler(content.listPublic));
 router.get('/content/:key', asyncHandler(content.getPublic));
 
@@ -36,6 +38,12 @@ admin.delete('/products/:id', asyncHandler(products.adminDelete));
 admin.get('/content', asyncHandler(content.adminList));
 admin.put('/content/:key', asyncHandler(content.adminUpsert));
 admin.delete('/content/:key', asyncHandler(content.adminDelete));
+
+// Categories
+admin.get('/categories', asyncHandler(categories.adminList));
+admin.post('/categories', asyncHandler(categories.adminCreate));
+admin.put('/categories/:id', asyncHandler(categories.adminUpdate));
+admin.delete('/categories/:id', asyncHandler(categories.adminDelete));
 
 // Uploads
 admin.post('/uploads', upload.array('files', 8), asyncHandler(uploadFiles));

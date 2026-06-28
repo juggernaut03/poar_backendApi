@@ -4,9 +4,10 @@ import { Product } from '../models/Product.js';
 
 // GET /api/products  (storefront) — published only, with filtering & paging.
 export async function listPublic(req, res) {
-  const { category, q, featured, page = 1, limit = 24 } = req.query;
+  const { category, subcategory, q, featured, page = 1, limit = 24 } = req.query;
   const filter = { isPublished: true };
   if (category) filter.category = category;
+  if (subcategory) filter.subcategory = subcategory;
   if (featured === 'true') filter.isFeatured = true;
   if (q) filter.$or = [
     { title: new RegExp(q, 'i') },

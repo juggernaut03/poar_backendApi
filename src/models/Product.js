@@ -22,6 +22,7 @@ const productSchema = new mongoose.Schema(
     currency: { type: String, default: 'INR' },
 
     category: { type: String, default: 'General', trim: true, index: true },
+    subcategory: { type: String, default: '', trim: true, index: true },
     brand: { type: String, default: '', trim: true },
 
     // Optional social proof shown on storefront cards (0–5).

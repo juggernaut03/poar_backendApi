@@ -135,13 +135,23 @@ export function classify(title, tags = []) {
   if (/\bom\b|swastik/.test(hay) && /bead|beed|rudraksh/.test(hay)) {
     return { category: 'Pooja & Spiritual', subcategory: 'Pooja Items' };
   }
+  // Mashers/potato/pav-bhaji → Kitchen Tools (guard against "pot" in "potato").
+  if (/\bmasher\b|potato mash|pav bhaji|khalbatta|\bmortar\b|\bpestle\b/.test(hay)) {
+    return { category: 'Kitchen Tools', subcategory: 'Mashers & Grinders' };
+  }
+
+  // Word-boundary match so short keywords (pot, pan, cup, om) don't match
+  // inside larger words (potato, paniyaram, cupboard).
+  const has = (k) => {
+    const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${esc}`).test(hay);
+  };
 
   for (const cat of TAXONOMY) {
-    const catHit = cat.keywords.some((k) => hay.includes(k));
-    if (!catHit) continue;
+    if (!cat.keywords.some(has)) continue;
 
     for (const sub of cat.subcategories) {
-      if (sub.keywords.length && sub.keywords.some((k) => hay.includes(k))) {
+      if (sub.keywords.length && sub.keywords.some(has)) {
         return { category: cat.name, subcategory: sub.name };
       }
     }

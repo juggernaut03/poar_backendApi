@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
-import { upload } from '../middleware/upload.js';
+import { upload, uploadCsv } from '../middleware/upload.js';
 
 import { login, me } from '../controllers/authController.js';
 import * as products from '../controllers/productController.js';
 import * as content from '../controllers/contentController.js';
 import * as categories from '../controllers/categoryController.js';
+import * as finance from '../controllers/financeController.js';
 import { uploadFiles } from '../controllers/uploadController.js';
 
 const router = Router();
@@ -47,6 +48,13 @@ admin.delete('/categories/:id', asyncHandler(categories.adminDelete));
 
 // Uploads
 admin.post('/uploads', upload.array('files', 8), asyncHandler(uploadFiles));
+
+// Finance / P&L
+admin.get('/finance/summary', asyncHandler(finance.summary));
+admin.get('/finance/sales-trend', asyncHandler(finance.salesTrend));
+admin.get('/finance/top-products', asyncHandler(finance.topProducts));
+admin.get('/finance/transactions', asyncHandler(finance.listTransactions));
+admin.post('/finance/import', uploadCsv.single('file'), asyncHandler(finance.importUpload));
 
 router.use('/admin', admin);
 

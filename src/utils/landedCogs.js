@@ -2,6 +2,7 @@ import { Product } from '../models/Product.js';
 import { PurchaseBatch } from '../models/PurchaseBatch.js';
 import { Shipment } from '../models/Shipment.js';
 import { Overhead } from '../models/Overhead.js';
+import { getFxRate } from './settings.js';
 
 // Compute the landed per-unit COGS for every SKU that has cost data.
 //
@@ -15,10 +16,11 @@ import { Overhead } from '../models/Overhead.js';
 //
 // Returns: { bySku: { [sku]: { purchasePerUnit, shippingPerUnit, landed, manualOverride } }, ... }
 export async function computeLandedCogs() {
-  const [products, batches, shipments] = await Promise.all([
+  const [products, batches, shipments, fxRate] = await Promise.all([
     Product.find({}).select('sku title weightGrams cost'),
     PurchaseBatch.find({}),
     Shipment.find({}),
+    getFxRate(), // INR per USD
   ]);
 
   const prodBySku = {};
@@ -58,9 +60,12 @@ export async function computeLandedCogs() {
   const bySku = {};
   const allSkus = new Set([...Object.keys(purchase), ...Object.keys(ship), ...products.map((p) => p.sku).filter(Boolean)]);
   for (const sku of allSkus) {
-    const pp = purchase[sku] && purchase[sku].qty ? purchase[sku].cost / purchase[sku].qty : null;
-    const sp = ship[sku] && ship[sku].units ? ship[sku].costShare / ship[sku].units : null;
-    const manual = prodBySku[sku]?.cost ?? null;
+    // Purchase & shipping are stored in INR — convert to USD via the rate.
+    const ppInr = purchase[sku] && purchase[sku].qty ? purchase[sku].cost / purchase[sku].qty : null;
+    const spInr = ship[sku] && ship[sku].units ? ship[sku].costShare / ship[sku].units : null;
+    const pp = ppInr != null ? ppInr / fxRate : null;
+    const sp = spInr != null ? spInr / fxRate : null;
+    const manual = prodBySku[sku]?.cost ?? null; // manual override is already in USD
 
     let landed = null;
     if (manual != null) {
@@ -72,6 +77,8 @@ export async function computeLandedCogs() {
     bySku[sku] = {
       purchasePerUnit: pp != null ? round(pp) : null,
       shippingPerUnit: sp != null ? round(sp) : null,
+      purchasePerUnitInr: ppInr != null ? round(ppInr) : null,
+      shippingPerUnitInr: spInr != null ? round(spInr) : null,
       manualOverride: manual,
       landed: landed != null ? round(landed) : null,
       hasData: pp != null || sp != null || manual != null,
@@ -80,14 +87,18 @@ export async function computeLandedCogs() {
   return bySku;
 }
 
-// Total overhead within [from,to] (inclusive). If no range, all overheads.
+// Total overhead within [from,to] (inclusive), converted INR -> USD.
 export async function overheadInRange(from, to) {
   const f = {};
   if (from) f.$gte = new Date(from);
   if (to) f.$lte = new Date(to);
   const match = Object.keys(f).length ? { date: f } : {};
-  const rows = await Overhead.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: '$amount' } } }]);
-  return rows[0]?.total || 0;
+  const [rows, fxRate] = await Promise.all([
+    Overhead.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    getFxRate(),
+  ]);
+  const inr = rows[0]?.total || 0;
+  return inr / fxRate; // USD
 }
 
 function round(n) {

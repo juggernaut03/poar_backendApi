@@ -60,6 +60,8 @@ admin.post('/finance/import', uploadCsv.single('file'), asyncHandler(finance.imp
 
 // Costs: purchase batches, shipments, overheads, computed landed COGS
 admin.get('/costs/landed', asyncHandler(costs.landedCogs));
+admin.get('/costs/settings', asyncHandler(costs.getSettings));
+admin.put('/costs/settings', asyncHandler(costs.updateSettings));
 admin.get('/costs/batches', asyncHandler(costs.listBatches));
 admin.post('/costs/batches', asyncHandler(costs.createBatch));
 admin.put('/costs/batches/:id', asyncHandler(costs.updateBatch));

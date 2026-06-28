@@ -3,6 +3,7 @@ import { Shipment } from '../models/Shipment.js';
 import { Overhead } from '../models/Overhead.js';
 import { computeLandedCogs } from '../utils/landedCogs.js';
 import { parseFbaShipment } from '../utils/fbaParser.js';
+import { getFinanceSettings, setFinanceSettings } from '../utils/settings.js';
 
 // ---- Purchase batches ----
 export async function listBatches(req, res) {
@@ -83,4 +84,18 @@ export async function deleteOverhead(req, res) {
 // ---- Computed landed COGS (per SKU) ----
 export async function landedCogs(req, res) {
   res.json(await computeLandedCogs());
+}
+
+// ---- Finance settings (exchange rate) ----
+export async function getSettings(req, res) {
+  res.json(await getFinanceSettings());
+}
+export async function updateSettings(req, res) {
+  const patch = {};
+  if (req.body?.fxRate != null) {
+    const r = Number(req.body.fxRate);
+    if (!Number.isFinite(r) || r <= 0) return res.status(400).json({ error: 'fxRate must be a positive number' });
+    patch.fxRate = r;
+  }
+  res.json(await setFinanceSettings(patch));
 }

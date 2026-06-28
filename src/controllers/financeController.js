@@ -1,8 +1,8 @@
 import { Transaction } from '../models/Transaction.js';
 import { DailySales } from '../models/DailySales.js';
-import { Product } from '../models/Product.js';
 import { parseTransactions, parseSalesDashboard } from '../utils/financeParsers.js';
 import { resolveCogs } from '../config/cogsMap.js';
+import { computeLandedCogs, overheadInRange } from '../utils/landedCogs.js';
 
 // Amazon reserve/balance movements are not income or expense — they shift
 // held funds between statements and net to zero. Exclude from P&L.
@@ -190,21 +190,14 @@ export async function profit(req, res) {
   const refMap = {};
   refunds.forEach((r) => { refMap[r._id] = r; });
 
-  // Live COGS lookup by SKU — the product's `cost` in the DB is the source of
-  // truth, so editing it in the admin immediately changes profit. The cogsMap
-  // is only used to resolve the truncated name -> SKU/label, and as a fallback
-  // cost when a product has no `cost` set yet.
-  const skus = [...new Set(paid.map((p) => resolveCogs(p._id)?.sku).filter(Boolean))];
-  const costBySku = {};
-  if (skus.length) {
-    const prods = await Product.find({ sku: { $in: skus } }).select('sku cost');
-    prods.forEach((pr) => { costBySku[pr.sku] = pr.cost; });
-  }
+  // Landed COGS per SKU (purchase + weight-allocated shipping, or manual override).
+  const landed = await computeLandedCogs();
 
   const products = [];
   let totalProfit = 0;
   let totalCogs = 0;
   let totalNetAfterAmazon = 0;
+  let totalUnitsKept = 0;
   let unmapped = 0;
 
   for (const p of paid) {
@@ -212,16 +205,16 @@ export async function profit(req, res) {
     const cogsInfo = resolveCogs(p._id);
     const unitsKept = Math.max(0, p.orders - ref.orders); // units customers kept
     const netAfterAmazon = p.net + ref.net; // Amazon net incl. refunds
-    // Prefer the live product cost (admin-editable); fall back to the map cost.
-    const liveCost = cogsInfo?.sku != null ? costBySku[cogsInfo.sku] : null;
-    const cogsPerUnit = liveCost != null ? liveCost : (cogsInfo ? cogsInfo.cost : null);
+    const cogsPerUnit = cogsInfo?.sku != null ? (landed[cogsInfo.sku]?.landed ?? null) : null;
     const cogsTotal = cogsPerUnit != null ? unitsKept * cogsPerUnit : null;
     const productProfit = cogsTotal != null ? netAfterAmazon - cogsTotal : null;
 
     if (cogsPerUnit == null) unmapped++;
     if (productProfit != null) { totalProfit += productProfit; totalCogs += cogsTotal; }
     totalNetAfterAmazon += netAfterAmazon;
+    totalUnitsKept += unitsKept;
 
+    const li = cogsInfo?.sku != null ? landed[cogsInfo.sku] : null;
     products.push({
       product: (cogsInfo?.label) || (p._id || 'Unknown').slice(0, 60),
       sku: cogsInfo?.sku || null,
@@ -230,6 +223,7 @@ export async function profit(req, res) {
       unitsKept,
       netAfterAmazon: round(netAfterAmazon),
       cogsPerUnit,
+      cogsBreakdown: li ? { purchase: li.purchasePerUnit, shipping: li.shippingPerUnit, manualOverride: li.manualOverride } : null,
       cogsTotal: cogsTotal != null ? round(cogsTotal) : null,
       profit: productProfit != null ? round(productProfit) : null,
       hasCost: cogsPerUnit != null,
@@ -245,13 +239,20 @@ export async function profit(req, res) {
   ]);
   const serviceFees = svc[0]?.total || 0;
 
+  // Overhead (rent/packaging) allocated across units sold in the range.
+  const overheadTotal = await overheadInRange(req.query.from, req.query.to);
+  const overheadPerUnit = totalUnitsKept > 0 ? overheadTotal / totalUnitsKept : 0;
+
   res.json({
     currency: 'USD',
     products,
-    productProfit: round(totalProfit), // sum of per-product profit
+    productProfit: round(totalProfit), // sum of per-product profit (after landed COGS)
     totalCogs: round(totalCogs),
     serviceFees: round(serviceFees), // negative
-    netProfit: round(totalProfit + serviceFees), // bottom line after everything we can attribute
+    overhead: round(-overheadTotal), // shown as a negative line
+    overheadPerUnit: round(overheadPerUnit),
+    unitsSold: totalUnitsKept,
+    netProfit: round(totalProfit + serviceFees - overheadTotal), // bottom line incl. overhead
     netAfterAmazon: round(totalNetAfterAmazon),
     unmappedProducts: unmapped, // products still missing a COGS value
   });

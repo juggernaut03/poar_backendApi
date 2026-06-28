@@ -19,8 +19,11 @@ const productSchema = new mongoose.Schema(
     // Display price (informational only — no checkout on our site).
     price: { type: Number, default: null },
     mrp: { type: Number, default: null },
-    // Our per-unit cost of goods (COGS) — used for true profit once entered.
+    // Manual per-unit COGS override (USD). If set, used as-is. Otherwise the
+    // finance module computes a landed COGS from purchase batches + shipping.
     cost: { type: Number, default: null },
+    // Shipping weight (grams), used to split inbound shipping cost by weight.
+    weightGrams: { type: Number, default: null },
     currency: { type: String, default: 'INR' },
 
     category: { type: String, default: 'General', trim: true, index: true },

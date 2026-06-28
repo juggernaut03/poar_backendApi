@@ -8,6 +8,7 @@ import * as products from '../controllers/productController.js';
 import * as content from '../controllers/contentController.js';
 import * as categories from '../controllers/categoryController.js';
 import * as finance from '../controllers/financeController.js';
+import * as costs from '../controllers/costController.js';
 import { uploadFiles } from '../controllers/uploadController.js';
 
 const router = Router();
@@ -56,6 +57,21 @@ admin.get('/finance/top-products', asyncHandler(finance.topProducts));
 admin.get('/finance/profit', asyncHandler(finance.profit));
 admin.get('/finance/transactions', asyncHandler(finance.listTransactions));
 admin.post('/finance/import', uploadCsv.single('file'), asyncHandler(finance.importUpload));
+
+// Costs: purchase batches, shipments, overheads, computed landed COGS
+admin.get('/costs/landed', asyncHandler(costs.landedCogs));
+admin.get('/costs/batches', asyncHandler(costs.listBatches));
+admin.post('/costs/batches', asyncHandler(costs.createBatch));
+admin.put('/costs/batches/:id', asyncHandler(costs.updateBatch));
+admin.delete('/costs/batches/:id', asyncHandler(costs.deleteBatch));
+admin.get('/costs/shipments', asyncHandler(costs.listShipments));
+admin.post('/costs/shipments', asyncHandler(costs.createShipment));
+admin.put('/costs/shipments/:id', asyncHandler(costs.updateShipment));
+admin.delete('/costs/shipments/:id', asyncHandler(costs.deleteShipment));
+admin.get('/costs/overheads', asyncHandler(costs.listOverheads));
+admin.post('/costs/overheads', asyncHandler(costs.createOverhead));
+admin.put('/costs/overheads/:id', asyncHandler(costs.updateOverhead));
+admin.delete('/costs/overheads/:id', asyncHandler(costs.deleteOverhead));
 
 router.use('/admin', admin);
 

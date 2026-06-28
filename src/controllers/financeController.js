@@ -1,5 +1,6 @@
 import { Transaction } from '../models/Transaction.js';
 import { DailySales } from '../models/DailySales.js';
+import { Product } from '../models/Product.js';
 import { parseTransactions, parseSalesDashboard } from '../utils/financeParsers.js';
 import { resolveCogs } from '../config/cogsMap.js';
 
@@ -185,6 +186,17 @@ export async function profit(req, res) {
   const refMap = {};
   refunds.forEach((r) => { refMap[r._id] = r; });
 
+  // Live COGS lookup by SKU — the product's `cost` in the DB is the source of
+  // truth, so editing it in the admin immediately changes profit. The cogsMap
+  // is only used to resolve the truncated name -> SKU/label, and as a fallback
+  // cost when a product has no `cost` set yet.
+  const skus = [...new Set(paid.map((p) => resolveCogs(p._id)?.sku).filter(Boolean))];
+  const costBySku = {};
+  if (skus.length) {
+    const prods = await Product.find({ sku: { $in: skus } }).select('sku cost');
+    prods.forEach((pr) => { costBySku[pr.sku] = pr.cost; });
+  }
+
   const products = [];
   let totalProfit = 0;
   let totalCogs = 0;
@@ -196,7 +208,9 @@ export async function profit(req, res) {
     const cogsInfo = resolveCogs(p._id);
     const unitsKept = Math.max(0, p.orders - ref.orders); // units customers kept
     const netAfterAmazon = p.net + ref.net; // Amazon net incl. refunds
-    const cogsPerUnit = cogsInfo ? cogsInfo.cost : null;
+    // Prefer the live product cost (admin-editable); fall back to the map cost.
+    const liveCost = cogsInfo?.sku != null ? costBySku[cogsInfo.sku] : null;
+    const cogsPerUnit = liveCost != null ? liveCost : (cogsInfo ? cogsInfo.cost : null);
     const cogsTotal = cogsPerUnit != null ? unitsKept * cogsPerUnit : null;
     const productProfit = cogsTotal != null ? netAfterAmazon - cogsTotal : null;
 

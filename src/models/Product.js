@@ -12,6 +12,10 @@ const productSchema = new mongoose.Schema(
     // Where the storefront "Buy on Amazon" button points.
     amazonUrl: { type: String, required: true, trim: true },
 
+    // Amazon identifiers (from the listings import). `sku` is the upsert key.
+    sku: { type: String, default: '', trim: true, index: true },
+    asin: { type: String, default: '', trim: true },
+
     // Display price (informational only — no checkout on our site).
     price: { type: Number, default: null },
     mrp: { type: Number, default: null },

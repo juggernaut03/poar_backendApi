@@ -148,10 +148,14 @@ export async function topProducts(req, res) {
     { $sort: { net: -1 } },
     { $limit: limit },
   ]);
-  res.json(rows.map((r) => ({
-    product: (r._id || 'Unknown').slice(0, 80),
-    net: round(r.net), gross: round(r.gross), fees: round(r.fees), orders: r.orders,
-  })));
+  res.json(rows.map((r) => {
+    const info = resolveCogs(r._id || '');
+    return {
+      product: info?.label || (r._id || 'Unknown').replace(/,.*$/, '').replace(/\.\.\.$/, '').trim(),
+      sku: info?.sku || null,
+      net: round(r.net), gross: round(r.gross), fees: round(r.fees), orders: r.orders,
+    };
+  }));
 }
 
 // GET /api/admin/finance/transactions — paginated raw list

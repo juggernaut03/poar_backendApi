@@ -2,6 +2,7 @@ import { PurchaseBatch } from '../models/PurchaseBatch.js';
 import { Shipment } from '../models/Shipment.js';
 import { Overhead } from '../models/Overhead.js';
 import { computeLandedCogs } from '../utils/landedCogs.js';
+import { parseFbaShipment } from '../utils/fbaParser.js';
 
 // ---- Purchase batches ----
 export async function listBatches(req, res) {
@@ -35,6 +36,31 @@ export async function updateShipment(req, res) {
 export async function deleteShipment(req, res) {
   await Shipment.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
+}
+
+// POST /api/admin/costs/shipments/import-fba — upload an FBA manifest TSV.
+// Upserts by shipmentId so re-uploading updates rather than duplicates.
+// Shipping cost is preserved if already set; pass ?cost=NN to set it.
+export async function importFbaShipment(req, res) {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded (field "file")' });
+  const parsed = parseFbaShipment(req.file.buffer.toString('utf8'));
+  if (!parsed.shipmentId || !parsed.lines.length) {
+    return res.status(400).json({ error: 'Could not parse an FBA shipment from this file' });
+  }
+  const cost = req.query.cost != null ? Number(req.query.cost) : null;
+
+  const existing = await Shipment.findOne({ shipmentId: parsed.shipmentId });
+  const doc = existing || new Shipment({ shipmentId: parsed.shipmentId });
+  doc.name = parsed.name;
+  doc.lines = parsed.lines.map((l) => ({ sku: l.sku, units: l.units }));
+  if (cost != null && Number.isFinite(cost)) doc.totalShippingCost = cost;
+  await doc.save();
+
+  res.status(existing ? 200 : 201).json({
+    shipment: doc,
+    parsed: { shipmentId: parsed.shipmentId, name: parsed.name, totalUnits: parsed.totalUnits, lineCount: parsed.lines.length },
+    updated: Boolean(existing),
+  });
 }
 
 // ---- Overheads ----

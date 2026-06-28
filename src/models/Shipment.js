@@ -10,9 +10,11 @@ const shipmentLineSchema = new mongoose.Schema(
 
 const shipmentSchema = new mongoose.Schema(
   {
-    reference: { type: String, default: '' }, // e.g. Amazon shipment ID
+    shipmentId: { type: String, default: '', index: true }, // FBA shipment ID, e.g. FBA1949Z2RJ7
+    name: { type: String, default: '' }, // FBA shipment name
+    reference: { type: String, default: '' }, // legacy / manual reference
     date: { type: Date, default: () => new Date() },
-    totalShippingCost: { type: Number, required: true, min: 0 }, // USD
+    totalShippingCost: { type: Number, default: 0, min: 0 }, // USD (may be 0 until cost is known)
     lines: { type: [shipmentLineSchema], default: [] },
     note: { type: String, default: '' },
   },

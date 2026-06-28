@@ -38,9 +38,9 @@ export const uploadCsv = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (req, file, cb) => {
-    const ok = /\.csv$/i.test(file.originalname) ||
-      ['text/csv', 'application/vnd.ms-excel', 'application/octet-stream'].includes(file.mimetype);
+    const ok = /\.(csv|tsv|txt)$/i.test(file.originalname) ||
+      ['text/csv', 'text/tab-separated-values', 'text/plain', 'application/vnd.ms-excel', 'application/octet-stream'].includes(file.mimetype);
     if (ok) return cb(null, true);
-    cb(new Error('Please upload a .csv file'));
+    cb(new Error('Please upload a .csv or .tsv file'));
   },
 });

@@ -66,6 +66,7 @@ admin.put('/costs/batches/:id', asyncHandler(costs.updateBatch));
 admin.delete('/costs/batches/:id', asyncHandler(costs.deleteBatch));
 admin.get('/costs/shipments', asyncHandler(costs.listShipments));
 admin.post('/costs/shipments', asyncHandler(costs.createShipment));
+admin.post('/costs/shipments/import-fba', uploadCsv.single('file'), asyncHandler(costs.importFbaShipment));
 admin.put('/costs/shipments/:id', asyncHandler(costs.updateShipment));
 admin.delete('/costs/shipments/:id', asyncHandler(costs.deleteShipment));
 admin.get('/costs/overheads', asyncHandler(costs.listOverheads));
